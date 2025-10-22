@@ -11,7 +11,7 @@
     },
     "dependencies": {
         "@prisma/client": "^6.17.1",
-        "@zenstackhq/runtime": "^3.0.0-beta.11",
+        "@zenstackhq/runtime": "next",
         "dotenv": "^16.4.5",
         "drizzle-orm": "^0.44.6",
         "fast-csv": "^5.0.1",
@@ -27,7 +27,7 @@
         "@types/faker": "^6.6.9",
         "@types/node": "20.14.7",
         "@types/pg": "^8.15.5",
-        "@zenstackhq/cli": "^3.0.0-beta.11",
+        "@zenstackhq/cli": "next",
         "drizzle-kit": "^0.31.5",
         "prisma": "^6.17.1",
         "ts-node": "^10.9.2",
