@@ -1,32 +1,36 @@
 {
-  "name": "script",
-  "license": "MIT",
-  "scripts": {
-    "start": "NODE_PG_FORCE_NATIVE=true NODE_OPTIONS='--max-old-space-size=4096' ts-node ./src/main.ts",
-    "prisma:gen:pg": "prisma generate --schema prisma-pg/schema.prisma",
-    "prisma:gen:mysql": "prisma generate --schema prisma-mysql/schema.prisma",
-    "prisma:gen:all": "npm run prisma:gen:pg && npm run prisma:gen:mysql",
-    "website:output": "npx ts-node ./src/lib/website-output --results-directory"
-  },
-  "dependencies": {
-    "@prisma/client": "5.15.0",
-    "dotenv": "^16.4.5",
-    "drizzle-orm": "^0.31.2",
-    "fast-csv": "^5.0.1",
-    "mysql2": "^3.10.2",
-    "pg": "^8.12.0",
-    "pg-native": "^3.1.0",
-    "postgres": "^3.4.4",
-    "reflect-metadata": "^0.2.2",
-    "typeorm": "^0.3.20"
-  },
-  "devDependencies": {
-    "@faker-js/faker": "^8.4.1",
-    "@types/faker": "^6.6.9",
-    "@types/node": "20.14.7",
-    "drizzle-kit": "^0.22.7",
-    "prisma": "5.15.0",
-    "ts-node": "10.9.2",
-    "typescript": "5.5.2"
-  }
+    "name": "script",
+    "license": "MIT",
+    "scripts": {
+        "start": "NODE_PG_FORCE_NATIVE=true NODE_OPTIONS='--max-old-space-size=4096' ts-node ./src/main.ts",
+        "prisma:gen:pg": "prisma generate --schema prisma-pg/schema.prisma",
+        "prisma:gen:mysql": "prisma generate --schema prisma-mysql/schema.prisma",
+        "prisma:gen:all": "npm run prisma:gen:pg && npm run prisma:gen:mysql",
+        "zen:gen": "zen generate --schema src/zenstack/schema/schema.zmodel",
+        "website:output": "npx ts-node ./src/lib/website-output --results-directory"
+    },
+    "dependencies": {
+        "@prisma/client": "^6.17.1",
+        "@zenstackhq/runtime": "^3.0.0-beta.11",
+        "dotenv": "^16.4.5",
+        "drizzle-orm": "^0.44.6",
+        "fast-csv": "^5.0.1",
+        "mysql2": "^3.10.2",
+        "pg": "^8.16.3",
+        "pg-native": "^3.1.0",
+        "postgres": "^3.4.4",
+        "reflect-metadata": "^0.2.2",
+        "typeorm": "^0.3.27"
+    },
+    "devDependencies": {
+        "@faker-js/faker": "^8.4.1",
+        "@types/faker": "^6.6.9",
+        "@types/node": "20.14.7",
+        "@types/pg": "^8.15.5",
+        "@zenstackhq/cli": "^3.0.0-beta.11",
+        "drizzle-kit": "^0.31.5",
+        "prisma": "^6.17.1",
+        "ts-node": "^10.9.2",
+        "typescript": "^5.9.3"
+    }
 }
