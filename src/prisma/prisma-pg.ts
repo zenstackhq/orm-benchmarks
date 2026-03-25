@@ -2,12 +2,16 @@ import measure from '../lib/measure';
 import { QueryResult } from '../lib/types';
 import { PrismaClient } from './client-pg/client';
 
+let prisma: PrismaClient;
+
 export async function prismaPg(databaseUrl: string): Promise<QueryResult[]> {
     console.log(`Run prisma benchmarks: `, databaseUrl);
 
-    const prisma = new PrismaClient({
-        datasourceUrl: databaseUrl,
-    });
+    if (!prisma) {
+        prisma = new PrismaClient({
+            datasourceUrl: databaseUrl,
+        });
+    }
 
     await prisma.$connect();
 
@@ -27,8 +31,8 @@ export async function prismaPg(databaseUrl: string): Promise<QueryResult[]> {
                 orderBy: { createdAt: 'desc' },
                 skip: 0,
                 take: 10,
-            })
-        )
+            }),
+        ),
     );
 
     results.push(
@@ -38,8 +42,8 @@ export async function prismaPg(databaseUrl: string): Promise<QueryResult[]> {
                 include: {
                     orders: true,
                 },
-            })
-        )
+            }),
+        ),
     );
 
     /**
@@ -47,7 +51,7 @@ export async function prismaPg(databaseUrl: string): Promise<QueryResult[]> {
      */
 
     results.push(
-        await measure('prisma-findFirst', prisma.customer.findFirst())
+        await measure('prisma-findFirst', prisma.customer.findFirst()),
     );
 
     results.push(
@@ -57,8 +61,8 @@ export async function prismaPg(databaseUrl: string): Promise<QueryResult[]> {
                 include: {
                     orders: true,
                 },
-            })
-        )
+            }),
+        ),
     );
 
     /**
@@ -70,8 +74,8 @@ export async function prismaPg(databaseUrl: string): Promise<QueryResult[]> {
             'prisma-findUnique',
             prisma.customer.findUnique({
                 where: { id: 1 },
-            })
-        )
+            }),
+        ),
     );
 
     results.push(
@@ -82,8 +86,8 @@ export async function prismaPg(databaseUrl: string): Promise<QueryResult[]> {
                 include: {
                     orders: true,
                 },
-            })
-        )
+            }),
+        ),
     );
 
     /**
@@ -98,8 +102,8 @@ export async function prismaPg(databaseUrl: string): Promise<QueryResult[]> {
                     name: 'John Doe',
                     email: 'john.doe@example.com',
                 },
-            })
-        )
+            }),
+        ),
     );
 
     results.push(
@@ -120,8 +124,8 @@ export async function prismaPg(databaseUrl: string): Promise<QueryResult[]> {
                         },
                     },
                 },
-            })
-        )
+            }),
+        ),
     );
 
     /**
@@ -136,8 +140,8 @@ export async function prismaPg(databaseUrl: string): Promise<QueryResult[]> {
                 data: {
                     name: 'John Doe Updated',
                 },
-            })
-        )
+            }),
+        ),
     );
 
     results.push(
@@ -153,8 +157,8 @@ export async function prismaPg(databaseUrl: string): Promise<QueryResult[]> {
                         },
                     },
                 },
-            })
-        )
+            }),
+        ),
     );
 
     /**
@@ -173,8 +177,8 @@ export async function prismaPg(databaseUrl: string): Promise<QueryResult[]> {
                     name: 'John Doe',
                     email: 'john.doe@example.com',
                 },
-            })
-        )
+            }),
+        ),
     );
 
     results.push(
@@ -202,8 +206,8 @@ export async function prismaPg(databaseUrl: string): Promise<QueryResult[]> {
                         },
                     },
                 },
-            })
-        )
+            }),
+        ),
     );
 
     /**
@@ -215,11 +219,9 @@ export async function prismaPg(databaseUrl: string): Promise<QueryResult[]> {
             'prisma-delete',
             prisma.customer.delete({
                 where: { id: 1 },
-            })
-        )
+            }),
+        ),
     );
-
-    await prisma.$disconnect();
 
     return results;
 }

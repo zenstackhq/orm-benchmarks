@@ -10,7 +10,7 @@ export function writeComparisonSummary(
     ormResults: Record<string, MultipleBenchmarkRunResults>,
     db: Database,
     benchmarkOptions: BenchmarkOptions,
-    resultsDirectoryTimestamp: string
+    resultsDirectoryTimestamp: string,
 ) {
     const zenstackResult = ormResults['zenstack'];
     if (!zenstackResult) {
@@ -53,7 +53,7 @@ Dataset size: ${benchmarkOptions.size}
                 (q) =>
                     median[q].toFixed(2) +
                     ' ' +
-                    diffPercentage(median[q], zenstackMedian.median[q])
+                    diffPercentage(median[q], zenstackMedian.median[q]),
             )
             .join('|')}|\n`;
     }
@@ -61,14 +61,14 @@ Dataset size: ${benchmarkOptions.size}
     fs.writeFileSync(
         path.join(
             '.',
-            `results/${db}-${benchmarkOptions.size}-${benchmarkOptions.iterations}-${resultsDirectoryTimestamp}/comparison.md`
+            `results/${db}-${benchmarkOptions.size}-${benchmarkOptions.iterations}-${resultsDirectoryTimestamp}/comparison.md`,
         ),
-        content
+        content,
     );
 }
 
 function aggregateMedian(
-    ormResult: MultipleBenchmarkRunResults
+    ormResult: MultipleBenchmarkRunResults,
 ): Record<string, number> {
     const series: Record<string, number[]> = {};
 
@@ -99,6 +99,7 @@ function aggregateMedian(
 function formatQuery(query: string) {
     return query.split('-').slice(1).join('-');
 }
+
 function diffPercentage(value: number, baseline: number) {
     const diff = value - baseline;
     const percent = (diff / baseline) * 100;

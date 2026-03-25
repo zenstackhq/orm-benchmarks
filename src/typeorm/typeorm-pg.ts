@@ -6,20 +6,23 @@ import { Customer } from './entities/Customer';
 import { Order } from './entities/Order';
 import { Product } from './entities/Product';
 
+let AppDataSource: DataSource;
+
 export async function typeormPg(databaseUrl: string): Promise<QueryResult[]> {
-    const AppDataSource = new DataSource({
-        type: 'postgres',
-        url: databaseUrl,
-        logging: false,
-        entities: [Customer, Order, Address, Product],
-        ssl: databaseUrl.includes('localhost')
-            ? undefined
-            : { rejectUnauthorized: false },
-    });
+    if (!AppDataSource) {
+        AppDataSource = new DataSource({
+            type: 'postgres',
+            url: databaseUrl,
+            logging: false,
+            entities: [Customer, Order, Address, Product],
+            ssl: databaseUrl.includes('localhost')
+                ? undefined
+                : { rejectUnauthorized: false },
+        });
+        await AppDataSource.initialize();
+    }
 
     console.log(`Run typeorm benchmarks: `, databaseUrl);
-
-    await AppDataSource.initialize();
 
     const results: QueryResult[] = [];
 
@@ -29,8 +32,8 @@ export async function typeormPg(databaseUrl: string): Promise<QueryResult[]> {
     results.push(
         await measure(
             'typeorm-findMany',
-            AppDataSource.getRepository(Customer).find()
-        )
+            AppDataSource.getRepository(Customer).find(),
+        ),
     );
 
     results.push(
@@ -41,8 +44,8 @@ export async function typeormPg(databaseUrl: string): Promise<QueryResult[]> {
                 order: { createdAt: 'DESC' },
                 skip: 0,
                 take: 10,
-            })
-        )
+            }),
+        ),
     );
 
     results.push(
@@ -50,8 +53,8 @@ export async function typeormPg(databaseUrl: string): Promise<QueryResult[]> {
             'typeorm-findMany-1-level-nesting',
             AppDataSource.getRepository(Customer).find({
                 relations: ['orders'],
-            })
-        )
+            }),
+        ),
     );
 
     /**
@@ -65,8 +68,8 @@ export async function typeormPg(databaseUrl: string): Promise<QueryResult[]> {
             'typeorm-findFirst',
             AppDataSource.getRepository(Customer).find({
                 take: 1,
-            })
-        )
+            }),
+        ),
     );
 
     results.push(
@@ -77,8 +80,8 @@ export async function typeormPg(databaseUrl: string): Promise<QueryResult[]> {
             AppDataSource.getRepository(Customer).find({
                 take: 1,
                 relations: ['orders'],
-            })
-        )
+            }),
+        ),
     );
 
     /**
@@ -87,8 +90,8 @@ export async function typeormPg(databaseUrl: string): Promise<QueryResult[]> {
     results.push(
         await measure(
             'typeorm-findUnique',
-            AppDataSource.getRepository(Customer).findOne({ where: { id: 1 } })
-        )
+            AppDataSource.getRepository(Customer).findOne({ where: { id: 1 } }),
+        ),
     );
 
     results.push(
@@ -97,8 +100,8 @@ export async function typeormPg(databaseUrl: string): Promise<QueryResult[]> {
             AppDataSource.getRepository(Customer).findOne({
                 where: { id: 1 },
                 relations: ['orders'],
-            })
-        )
+            }),
+        ),
     );
 
     /**
@@ -111,8 +114,8 @@ export async function typeormPg(databaseUrl: string): Promise<QueryResult[]> {
                 name: 'John Doe',
                 email: 'john.doe@example.com',
                 isActive: false,
-            })
-        )
+            }),
+        ),
     );
 
     const nestedCreate = AppDataSource.transaction(
@@ -141,7 +144,7 @@ export async function typeormPg(databaseUrl: string): Promise<QueryResult[]> {
                     { A: order.id, B: 2 },
                 ])
                 .execute();
-        }
+        },
     );
     results.push(await measure('typeorm-nested-create', nestedCreate));
 
@@ -153,9 +156,9 @@ export async function typeormPg(databaseUrl: string): Promise<QueryResult[]> {
             'typeorm-update',
             AppDataSource.getRepository(Customer).update(
                 { id: 1 },
-                { name: 'John Doe Updated' }
-            )
-        )
+                { name: 'John Doe Updated' },
+            ),
+        ),
     );
 
     results.push(
@@ -166,17 +169,17 @@ export async function typeormPg(databaseUrl: string): Promise<QueryResult[]> {
                 await transactionalEntityManager.update(
                     Customer,
                     { id: 1 },
-                    { name: 'John Doe Updated' }
+                    { name: 'John Doe Updated' },
                 );
 
                 // Update address
                 await transactionalEntityManager.update(
                     Address,
                     { customer: { id: 1 } },
-                    { street: '456 New St' }
+                    { street: '456 New St' },
                 );
-            })
-        )
+            }),
+        ),
     );
 
     /**
@@ -190,8 +193,8 @@ export async function typeormPg(databaseUrl: string): Promise<QueryResult[]> {
                 name: 'John Doe Upserted',
                 email: 'john.doe@example.com',
                 isActive: false,
-            })
-        )
+            }),
+        ),
     );
 
     // Nested upsert operation using transaction
@@ -214,7 +217,7 @@ export async function typeormPg(databaseUrl: string): Promise<QueryResult[]> {
                 postalCode: '12345',
                 country: 'Country',
             });
-        }
+        },
     );
     results.push(await measure('typeorm-nested-upsert', nestedUpsert));
 
@@ -224,11 +227,9 @@ export async function typeormPg(databaseUrl: string): Promise<QueryResult[]> {
     results.push(
         await measure(
             'typeorm-delete',
-            AppDataSource.getRepository(Customer).delete({ id: 1 })
-        )
+            AppDataSource.getRepository(Customer).delete({ id: 1 }),
+        ),
     );
-
-    await AppDataSource.destroy();
 
     return results;
 }

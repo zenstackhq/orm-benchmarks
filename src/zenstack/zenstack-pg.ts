@@ -1,20 +1,25 @@
-import { ZenStackClient } from '@zenstackhq/runtime';
-import { PostgresDialect } from 'kysely';
+import { ClientContract, ZenStackClient } from '@zenstackhq/orm';
+import { PostgresDialect } from '@zenstackhq/orm/dialects/postgres';
 import { Pool } from 'pg';
 import measure from '../lib/measure';
 import { QueryResult } from '../lib/types';
 import { schema } from './schema/schema';
 
+let db: ClientContract<typeof schema>;
+
 export async function zenstackPg(databaseUrl: string): Promise<QueryResult[]> {
     console.log(`Run zenstack benchmarks: `, databaseUrl);
 
-    const db = new ZenStackClient(schema, {
-        dialect: new PostgresDialect({
-            pool: new Pool({
-                connectionString: databaseUrl,
+    if (!db) {
+        db = new ZenStackClient(schema, {
+            dialect: new PostgresDialect({
+                pool: new Pool({
+                    connectionString: databaseUrl,
+                }),
             }),
-        }),
-    });
+            // log: ['query'],
+        });
+    }
 
     await db.$connect();
 
@@ -34,8 +39,8 @@ export async function zenstackPg(databaseUrl: string): Promise<QueryResult[]> {
                 orderBy: { createdAt: 'desc' },
                 skip: 0,
                 take: 10,
-            })
-        )
+            }),
+        ),
     );
 
     results.push(
@@ -45,8 +50,8 @@ export async function zenstackPg(databaseUrl: string): Promise<QueryResult[]> {
                 include: {
                     orders: true,
                 },
-            })
-        )
+            }),
+        ),
     );
 
     /**
@@ -62,8 +67,8 @@ export async function zenstackPg(databaseUrl: string): Promise<QueryResult[]> {
                 include: {
                     orders: true,
                 },
-            })
-        )
+            }),
+        ),
     );
 
     /**
@@ -75,8 +80,8 @@ export async function zenstackPg(databaseUrl: string): Promise<QueryResult[]> {
             'zenstack-findUnique',
             db.customer.findUnique({
                 where: { id: 1 },
-            })
-        )
+            }),
+        ),
     );
 
     results.push(
@@ -87,8 +92,8 @@ export async function zenstackPg(databaseUrl: string): Promise<QueryResult[]> {
                 include: {
                     orders: true,
                 },
-            })
-        )
+            }),
+        ),
     );
 
     /**
@@ -103,8 +108,8 @@ export async function zenstackPg(databaseUrl: string): Promise<QueryResult[]> {
                     name: 'John Doe',
                     email: 'john.doe@example.com',
                 },
-            })
-        )
+            }),
+        ),
     );
 
     results.push(
@@ -125,8 +130,8 @@ export async function zenstackPg(databaseUrl: string): Promise<QueryResult[]> {
                         },
                     },
                 },
-            })
-        )
+            }),
+        ),
     );
 
     /**
@@ -141,8 +146,8 @@ export async function zenstackPg(databaseUrl: string): Promise<QueryResult[]> {
                 data: {
                     name: 'John Doe Updated',
                 },
-            })
-        )
+            }),
+        ),
     );
 
     results.push(
@@ -158,8 +163,8 @@ export async function zenstackPg(databaseUrl: string): Promise<QueryResult[]> {
                         },
                     },
                 },
-            })
-        )
+            }),
+        ),
     );
 
     /**
@@ -178,8 +183,8 @@ export async function zenstackPg(databaseUrl: string): Promise<QueryResult[]> {
                     name: 'John Doe',
                     email: 'john.doe@example.com',
                 },
-            })
-        )
+            }),
+        ),
     );
 
     results.push(
@@ -207,8 +212,8 @@ export async function zenstackPg(databaseUrl: string): Promise<QueryResult[]> {
                         },
                     },
                 },
-            })
-        )
+            }),
+        ),
     );
 
     /**
@@ -220,11 +225,9 @@ export async function zenstackPg(databaseUrl: string): Promise<QueryResult[]> {
             'zenstack-delete',
             db.customer.delete({
                 where: { id: 1 },
-            })
-        )
+            }),
+        ),
     );
-
-    await db.$disconnect();
 
     return results;
 }

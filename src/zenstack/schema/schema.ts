@@ -5,12 +5,12 @@
 
 /* eslint-disable */
 
-import { type SchemaDef, ExpressionUtils } from "@zenstackhq/runtime/schema";
-export const schema = {
-    provider: {
+import { type SchemaDef, type AttributeApplication, type FieldDefault, ExpressionUtils } from "@zenstackhq/schema";
+export class SchemaType implements SchemaDef {
+    provider = {
         type: "postgresql"
-    },
-    models: {
+    } as const;
+    models = {
         Customer: {
             name: "Customer",
             fields: {
@@ -18,14 +18,14 @@ export const schema = {
                     name: "id",
                     type: "Int",
                     id: true,
-                    attributes: [{ name: "@id" }, { name: "@default", args: [{ name: "value", value: ExpressionUtils.call("autoincrement") }] }],
-                    default: ExpressionUtils.call("autoincrement")
+                    attributes: [{ name: "@id" }, { name: "@default", args: [{ name: "value", value: ExpressionUtils.call("autoincrement") }] }] as readonly AttributeApplication[],
+                    default: ExpressionUtils.call("autoincrement") as FieldDefault
                 },
                 createdAt: {
                     name: "createdAt",
                     type: "DateTime",
-                    attributes: [{ name: "@default", args: [{ name: "value", value: ExpressionUtils.call("now") }] }],
-                    default: ExpressionUtils.call("now")
+                    attributes: [{ name: "@default", args: [{ name: "value", value: ExpressionUtils.call("now") }] }] as readonly AttributeApplication[],
+                    default: ExpressionUtils.call("now") as FieldDefault
                 },
                 name: {
                     name: "name",
@@ -45,8 +45,8 @@ export const schema = {
                 isActive: {
                     name: "isActive",
                     type: "Boolean",
-                    attributes: [{ name: "@default", args: [{ name: "value", value: ExpressionUtils.literal(false) }] }],
-                    default: false
+                    attributes: [{ name: "@default", args: [{ name: "value", value: ExpressionUtils.literal(false) }] }] as readonly AttributeApplication[],
+                    default: false as FieldDefault
                 },
                 orders: {
                     name: "orders",
@@ -67,8 +67,8 @@ export const schema = {
                     name: "id",
                     type: "Int",
                     id: true,
-                    attributes: [{ name: "@id" }, { name: "@default", args: [{ name: "value", value: ExpressionUtils.call("autoincrement") }] }],
-                    default: ExpressionUtils.call("autoincrement")
+                    attributes: [{ name: "@id" }, { name: "@default", args: [{ name: "value", value: ExpressionUtils.call("autoincrement") }] }] as readonly AttributeApplication[],
+                    default: ExpressionUtils.call("autoincrement") as FieldDefault
                 },
                 street: {
                     name: "street",
@@ -94,15 +94,15 @@ export const schema = {
                     name: "customerId",
                     type: "Int",
                     unique: true,
-                    attributes: [{ name: "@unique" }],
+                    attributes: [{ name: "@unique" }] as readonly AttributeApplication[],
                     foreignKeyFor: [
                         "customer"
-                    ]
+                    ] as readonly string[]
                 },
                 customer: {
                     name: "customer",
                     type: "Customer",
-                    attributes: [{ name: "@relation", args: [{ name: "fields", value: ExpressionUtils.array([ExpressionUtils.field("customerId")]) }, { name: "references", value: ExpressionUtils.array([ExpressionUtils.field("id")]) }, { name: "onDelete", value: ExpressionUtils.literal("Cascade") }] }],
+                    attributes: [{ name: "@relation", args: [{ name: "fields", value: ExpressionUtils.array("Int", [ExpressionUtils.field("customerId")]) }, { name: "references", value: ExpressionUtils.array("Int", [ExpressionUtils.field("id")]) }, { name: "onDelete", value: ExpressionUtils.literal("Cascade") }] }] as readonly AttributeApplication[],
                     relation: { opposite: "address", fields: ["customerId"], references: ["id"], onDelete: "Cascade" }
                 }
             },
@@ -119,8 +119,8 @@ export const schema = {
                     name: "id",
                     type: "Int",
                     id: true,
-                    attributes: [{ name: "@id" }, { name: "@default", args: [{ name: "value", value: ExpressionUtils.call("autoincrement") }] }],
-                    default: ExpressionUtils.call("autoincrement")
+                    attributes: [{ name: "@id" }, { name: "@default", args: [{ name: "value", value: ExpressionUtils.call("autoincrement") }] }] as readonly AttributeApplication[],
+                    default: ExpressionUtils.call("autoincrement") as FieldDefault
                 },
                 date: {
                     name: "date",
@@ -135,19 +135,19 @@ export const schema = {
                     type: "Int",
                     foreignKeyFor: [
                         "customer"
-                    ]
+                    ] as readonly string[]
                 },
                 customer: {
                     name: "customer",
                     type: "Customer",
-                    attributes: [{ name: "@relation", args: [{ name: "fields", value: ExpressionUtils.array([ExpressionUtils.field("customerId")]) }, { name: "references", value: ExpressionUtils.array([ExpressionUtils.field("id")]) }, { name: "onDelete", value: ExpressionUtils.literal("Cascade") }] }],
+                    attributes: [{ name: "@relation", args: [{ name: "fields", value: ExpressionUtils.array("Int", [ExpressionUtils.field("customerId")]) }, { name: "references", value: ExpressionUtils.array("Int", [ExpressionUtils.field("id")]) }, { name: "onDelete", value: ExpressionUtils.literal("Cascade") }] }] as readonly AttributeApplication[],
                     relation: { opposite: "orders", fields: ["customerId"], references: ["id"], onDelete: "Cascade" }
                 },
                 products: {
                     name: "products",
                     type: "Product",
                     array: true,
-                    attributes: [{ name: "@relation", args: [{ name: "name", value: ExpressionUtils.literal("OrderProducts") }] }],
+                    attributes: [{ name: "@relation", args: [{ name: "name", value: ExpressionUtils.literal("OrderProducts") }] }] as readonly AttributeApplication[],
                     relation: { opposite: "orders", name: "OrderProducts" }
                 }
             },
@@ -163,8 +163,8 @@ export const schema = {
                     name: "id",
                     type: "Int",
                     id: true,
-                    attributes: [{ name: "@id" }, { name: "@default", args: [{ name: "value", value: ExpressionUtils.call("autoincrement") }] }],
-                    default: ExpressionUtils.call("autoincrement")
+                    attributes: [{ name: "@id" }, { name: "@default", args: [{ name: "value", value: ExpressionUtils.call("autoincrement") }] }] as readonly AttributeApplication[],
+                    default: ExpressionUtils.call("autoincrement") as FieldDefault
                 },
                 name: {
                     name: "name",
@@ -187,7 +187,7 @@ export const schema = {
                     name: "orders",
                     type: "Order",
                     array: true,
-                    attributes: [{ name: "@relation", args: [{ name: "name", value: ExpressionUtils.literal("OrderProducts") }] }],
+                    attributes: [{ name: "@relation", args: [{ name: "name", value: ExpressionUtils.literal("OrderProducts") }] }] as readonly AttributeApplication[],
                     relation: { opposite: "products", name: "OrderProducts" }
                 }
             },
@@ -196,7 +196,7 @@ export const schema = {
                 id: { type: "Int" }
             }
         }
-    },
-    plugins: {}
-} as const satisfies SchemaDef;
-export type SchemaType = typeof schema;
+    } as const;
+    plugins = {};
+}
+export const schema = new SchemaType();

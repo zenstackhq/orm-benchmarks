@@ -10,7 +10,7 @@ import { typeormPg } from './typeorm/typeorm-pg';
 import { zenstackPg } from './zenstack/zenstack-pg';
 
 export default async function runBenchmarksPg(
-    benchmarkOptions: BenchmarkOptions
+    benchmarkOptions: BenchmarkOptions,
 ) {
     const { databaseUrl, iterations, size, fakerSeed } = benchmarkOptions;
 
@@ -27,7 +27,7 @@ export default async function runBenchmarksPg(
         'postgresql',
         zenstackResults,
         benchmarkOptions,
-        resultsDirectoryTimestamp
+        resultsDirectoryTimestamp,
     );
 
     const prismaResults: MultipleBenchmarkRunResults = [];
@@ -41,7 +41,7 @@ export default async function runBenchmarksPg(
         'postgresql',
         prismaResults,
         benchmarkOptions,
-        resultsDirectoryTimestamp
+        resultsDirectoryTimestamp,
     );
 
     const drizzleResults: MultipleBenchmarkRunResults = [];
@@ -55,7 +55,7 @@ export default async function runBenchmarksPg(
         'postgresql',
         drizzleResults,
         benchmarkOptions,
-        resultsDirectoryTimestamp
+        resultsDirectoryTimestamp,
     );
 
     const typeormResults: MultipleBenchmarkRunResults = [];
@@ -69,7 +69,7 @@ export default async function runBenchmarksPg(
         'postgresql',
         typeormResults,
         benchmarkOptions,
-        resultsDirectoryTimestamp
+        resultsDirectoryTimestamp,
     );
 
     writeComparisonSummary(
@@ -81,7 +81,7 @@ export default async function runBenchmarksPg(
         },
         'postgresql',
         benchmarkOptions,
-        resultsDirectoryTimestamp
+        resultsDirectoryTimestamp,
     );
 
     // Optionally compare results
