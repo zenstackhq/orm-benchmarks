@@ -21,6 +21,7 @@ export const Customer = pgTable('Customer', {
     name: text('name'),
     email: text('email').notNull(),
     isActive: boolean('isActive').notNull(),
+    tenantId: integer('tenantId').notNull().default(1),
 });
 
 export const Address = pgTable(

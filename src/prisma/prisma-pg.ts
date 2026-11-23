@@ -1,16 +1,69 @@
+import { PrismaPg } from '@prisma/adapter-pg';
+import { Driver, sslFor } from '../lib/drivers';
 import measure from '../lib/measure';
+import {
+    assertIsolation,
+    OTHER_TENANT,
+    policyUrl,
+    TENANT,
+    TENANT_SETTING,
+} from '../lib/policies';
 import { QueryResult } from '../lib/types';
 import { PrismaClient } from './client-pg/client';
 
-let prisma: PrismaClient;
+const clients = new Map<boolean, PrismaClient>();
 
-export async function prismaPg(databaseUrl: string): Promise<QueryResult[]> {
-    console.log(`Run prisma benchmarks: `, databaseUrl);
+/**
+ * Prisma's documented row-level-security pattern: a client extension that runs every operation in a
+ * batch transaction whose first statement sets the tenant.
+ */
+function forTenant(client: PrismaClient, tenant: number): PrismaClient {
+    return client.$extends({
+        query: {
+            $allModels: {
+                async $allOperations({ args, query }) {
+                    const [, result] = await client.$transaction([
+                        client.$executeRaw`select set_config(${TENANT_SETTING}, ${String(tenant)}, true)`,
+                        query(args),
+                    ]);
+                    return result;
+                },
+            },
+        },
+    }) as unknown as PrismaClient;
+}
 
+/**
+ * Prisma 7 has no Rust engine. It connects through a driver adapter; `pg` is the one it ships for
+ * PostgreSQL. Prisma has no access-policy feature, so the policy target uses PostgreSQL row-level
+ * security on a role that cannot bypass it.
+ */
+export async function prismaPg(
+    databaseUrl: string,
+    driver: Driver = 'pg',
+    policy = false,
+): Promise<QueryResult[]> {
+    console.log(
+        `Run prisma benchmarks (${driver}${policy ? ', policy' : ''}): `,
+        databaseUrl,
+    );
+
+    let prisma = clients.get(policy);
     if (!prisma) {
-        prisma = new PrismaClient({
-            datasourceUrl: databaseUrl,
+        const url = policy ? policyUrl(databaseUrl) : databaseUrl;
+        const ssl = sslFor(url) || undefined;
+        const client = new PrismaClient({
+            adapter: new PrismaPg({ connectionString: url, ssl }),
         });
+        prisma = policy ? forTenant(client, TENANT) : client;
+        clients.set(policy, prisma);
+        if (policy) {
+            assertIsolation(
+                'prisma-policy',
+                await prisma.customer.count(),
+                await forTenant(client, OTHER_TENANT).customer.count(),
+            );
+        }
     }
 
     await prisma.$connect();
@@ -21,11 +74,12 @@ export async function prismaPg(databaseUrl: string): Promise<QueryResult[]> {
      * findMany
      */
 
-    results.push(await measure('prisma-findMany', prisma.customer.findMany()));
+    results.push(
+        await measure('prisma-findMany', () => prisma.customer.findMany()),
+    );
 
     results.push(
-        await measure(
-            'prisma-findMany-filter-paginate-order',
+        await measure('prisma-findMany-filter-paginate-order', () =>
             prisma.customer.findMany({
                 where: { isActive: true },
                 orderBy: { createdAt: 'desc' },
@@ -36,8 +90,7 @@ export async function prismaPg(databaseUrl: string): Promise<QueryResult[]> {
     );
 
     results.push(
-        await measure(
-            'prisma-findMany-1-level-nesting',
+        await measure('prisma-findMany-1-level-nesting', () =>
             prisma.customer.findMany({
                 include: {
                     orders: true,
@@ -51,12 +104,11 @@ export async function prismaPg(databaseUrl: string): Promise<QueryResult[]> {
      */
 
     results.push(
-        await measure('prisma-findFirst', prisma.customer.findFirst()),
+        await measure('prisma-findFirst', () => prisma.customer.findFirst()),
     );
 
     results.push(
-        await measure(
-            'prisma-findFirst-1-level-nesting',
+        await measure('prisma-findFirst-1-level-nesting', () =>
             prisma.customer.findFirst({
                 include: {
                     orders: true,
@@ -70,8 +122,7 @@ export async function prismaPg(databaseUrl: string): Promise<QueryResult[]> {
      */
 
     results.push(
-        await measure(
-            'prisma-findUnique',
+        await measure('prisma-findUnique', () =>
             prisma.customer.findUnique({
                 where: { id: 1 },
             }),
@@ -79,8 +130,7 @@ export async function prismaPg(databaseUrl: string): Promise<QueryResult[]> {
     );
 
     results.push(
-        await measure(
-            'prisma-findUnique-1-level-nesting',
+        await measure('prisma-findUnique-1-level-nesting', () =>
             prisma.customer.findUnique({
                 where: { id: 1 },
                 include: {
@@ -95,8 +145,7 @@ export async function prismaPg(databaseUrl: string): Promise<QueryResult[]> {
      */
 
     results.push(
-        await measure(
-            'prisma-create',
+        await measure('prisma-create', () =>
             prisma.customer.create({
                 data: {
                     name: 'John Doe',
@@ -107,8 +156,7 @@ export async function prismaPg(databaseUrl: string): Promise<QueryResult[]> {
     );
 
     results.push(
-        await measure(
-            'prisma-nested-create',
+        await measure('prisma-nested-create', () =>
             prisma.customer.create({
                 data: {
                     name: 'John Doe',
@@ -133,8 +181,7 @@ export async function prismaPg(databaseUrl: string): Promise<QueryResult[]> {
      */
 
     results.push(
-        await measure(
-            'prisma-update',
+        await measure('prisma-update', () =>
             prisma.customer.update({
                 where: { id: 1 },
                 data: {
@@ -145,8 +192,7 @@ export async function prismaPg(databaseUrl: string): Promise<QueryResult[]> {
     );
 
     results.push(
-        await measure(
-            'prisma-nested-update',
+        await measure('prisma-nested-update', () =>
             prisma.customer.update({
                 where: { id: 1 },
                 data: {
@@ -166,12 +212,12 @@ export async function prismaPg(databaseUrl: string): Promise<QueryResult[]> {
      */
 
     results.push(
-        await measure(
-            'prisma-upsert',
+        // Each attempt writes a new value, so no ORM can skip the update as unchanged.
+        await measure('prisma-upsert', (attempt) =>
             prisma.customer.upsert({
                 where: { id: 1 },
                 update: {
-                    name: 'John Doe Upserted',
+                    name: `John Doe Upserted ${attempt}`,
                 },
                 create: {
                     name: 'John Doe',
@@ -182,15 +228,14 @@ export async function prismaPg(databaseUrl: string): Promise<QueryResult[]> {
     );
 
     results.push(
-        await measure(
-            'prisma-nested-upsert',
+        await measure('prisma-nested-upsert', (attempt) =>
             prisma.customer.upsert({
                 where: { id: 1 },
                 update: {
-                    name: 'John Doe Upserted',
+                    name: `John Doe Upserted ${attempt}`,
                     address: {
                         update: {
-                            street: '456 New St',
+                            street: `456 New St ${attempt}`,
                         },
                     },
                 },
@@ -215,10 +260,9 @@ export async function prismaPg(databaseUrl: string): Promise<QueryResult[]> {
      */
 
     results.push(
-        await measure(
-            'prisma-delete',
+        await measure('prisma-delete', (attempt) =>
             prisma.customer.delete({
-                where: { id: 1 },
+                where: { id: 1 + attempt },
             }),
         ),
     );

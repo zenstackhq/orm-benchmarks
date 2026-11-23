@@ -3,6 +3,18 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// The access rules below apply only to a client created with PolicyPlugin, which the `policy`
+// targets use. The plain ZenStack targets ignore them.
+plugin policy {
+  provider = "@zenstackhq/plugin-policy"
+}
+
+type Auth {
+  id          Int       @id
+  tenantId    Int
+  @@auth
+}
+
 model Customer {
   id          Int       @id @default(autoincrement())
   createdAt   DateTime  @default(now())
@@ -10,8 +22,12 @@ model Customer {
   email       String    // @unique
   address     Address?
   isActive    Boolean   @default(false)
+  // The owner the policy targets check. Every seeded row belongs to tenant 1.
+  tenantId    Int       @default(1)
   // extraInfo   Json?
   orders      Order[]
+
+  @@allow('all', tenantId == auth().tenantId)
 }
 
 model Address {
@@ -22,6 +38,8 @@ model Address {
   country     String?
   customerId  Int       @unique
   customer    Customer  @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@allow('all', customer.tenantId == auth().tenantId)
 }
 
 model Order {
@@ -31,6 +49,8 @@ model Order {
   customerId  Int
   customer    Customer  @relation(fields: [customerId], references: [id], onDelete: Cascade)
   products    Product[] @relation("OrderProducts")
+
+  @@allow('all', customer.tenantId == auth().tenantId)
 }
 
 model Product {
@@ -40,4 +60,7 @@ model Product {
   quantity    Int
   description String?
   orders      Order[]   @relation("OrderProducts")
+
+  // The product catalog is shared by every tenant.
+  @@allow('all', true)
 }

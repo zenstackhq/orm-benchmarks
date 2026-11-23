@@ -1,7 +1,7 @@
 // src/entity/Address.ts
 import "reflect-metadata";
 
-import { Entity, PrimaryGeneratedColumn, Column, ManyToOne } from "typeorm";
+import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, type Relation } from "typeorm";
 import { Customer } from "./Customer";
 
 @Entity("Address")
@@ -22,5 +22,6 @@ export class Address {
   country: string;
 
   @ManyToOne(() => Customer, (customer) => customer.addresses, { onDelete: "CASCADE", onUpdate: "CASCADE" })
-  customer: Customer;
+  // Relation<> keeps the decorator metadata from reading Customer before it exists (circular import).
+  customer: Relation<Customer>;
 }

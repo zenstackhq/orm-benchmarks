@@ -23,6 +23,9 @@ export class Customer {
     @Column({ name: "isActive", default: false })
     isActive: boolean;
 
+    @Column({ name: "tenantId", default: 1 })
+    tenantId: number;
+
     @OneToMany(() => Order, order => order.customer)
     orders: Order[];
 

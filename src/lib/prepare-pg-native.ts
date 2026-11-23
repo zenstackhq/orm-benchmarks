@@ -4,6 +4,8 @@
  * This database dump is restored for all subsequent invocations via `pg_restore`.
  */
 
+import { PrismaPg } from '@prisma/adapter-pg';
+import { sslFor } from './drivers';
 import { PrismaClient } from '../prisma/client-pg/client';
 import { faker } from '@faker-js/faker';
 import {
@@ -13,6 +15,26 @@ import {
 import * as path from 'path';
 import * as fs from 'fs';
 import { promises as fsPromises } from 'fs';
+import { execFileSync } from 'child_process';
+
+/**
+ * The dump's table of contents without row-level-security entries. The seeding path keeps the
+ * schema, so a dump made after a policy run can contain policies naming the bench_app role, which
+ * may not exist on the server being restored. Policies are applied after the restore for policy
+ * targets only (src/lib/policies.ts), and grants are skipped with --no-acl.
+ */
+function restoreList(filePath: string): string {
+    const listPath = `${filePath}.list`;
+    const toc = execFileSync('pg_restore', ['-l', filePath], { encoding: 'utf8' });
+    fs.writeFileSync(
+        listPath,
+        toc
+            .split('\n')
+            .filter((line) => !/ (POLICY|ROW SECURITY) /.test(line))
+            .join('\n'),
+    );
+    return listPath;
+}
 
 export async function preparePg(options: {
     databaseUrl: string;
@@ -34,7 +56,8 @@ export async function preparePg(options: {
 
     const filePath = path.join(
         './data',
-        `/data-pg-${NUMBER_OF_RECORDS}-${FAKER_SEED}.sql`
+        // v2: Customer has a tenantId column. A dump from before it would restore without the column.
+        `/data-pg-v2-${NUMBER_OF_RECORDS}-${FAKER_SEED}.sql`
     );
     if (await fileExists(filePath)) {
         console.log(`Use SQL dump: ${filePath}`);
@@ -45,7 +68,7 @@ export async function preparePg(options: {
     console.log(`${filePath} doesn't exist yet, creating SQL dump ...`);
 
     const prisma = new PrismaClient({
-        datasourceUrl: options.databaseUrl,
+        adapter: new PrismaPg({ connectionString: options.databaseUrl, ssl: sslFor(options.databaseUrl) || undefined }),
     });
 
     // Clean tables
@@ -173,8 +196,8 @@ async function createSQLDumpPg(databaseUrl: string, filePath?: string) {
         return;
     }
     console.log(`Dumping dataset with connection details: `, connectionDetails);
-    const { host, user, db, password } = connectionDetails;
-    const command = `pg_dump -h ${host} -U ${user} -d ${db} --no-owner -F c -b -v -f ${filePath}`;
+    const { host, port, user, db, password } = connectionDetails;
+    const command = `pg_dump -h ${host} -p ${port || 5432} -U ${user} -d ${db} --no-owner -F c -b -v -f ${filePath}`;
     // Other options for Xata
     // const command = `pg_dump -h ${host} -U ${user} -d ${db} --no-acl --no-owner --no-table-access-method -F c -b -v -f ${filePath}`;
     console.log(`SQL dump command: `, command);
@@ -197,8 +220,8 @@ async function restoreFromSQLDumpPg(databaseUrl: string, filePath: string) {
         console.log(`Error while creating SQL dump. DB URL not valid.`);
         return;
     }
-    const { host, user, db, password } = connectionDetails;
-    const commandTruncate = `psql -h ${host} -U ${user} -d ${db} -c 'DROP SCHEMA public CASCADE; CREATE SCHEMA public;'`;
+    const { host, port, user, db, password } = connectionDetails;
+    const commandTruncate = `psql -h ${host} -p ${port || 5432} -U ${user} -d ${db} -c 'DROP SCHEMA public CASCADE; CREATE SCHEMA public;'`;
     console.log(`Truncate command: `, commandTruncate);
     try {
         await executeCommand(commandTruncate, { PGPASSWORD: password });
@@ -206,7 +229,7 @@ async function restoreFromSQLDumpPg(databaseUrl: string, filePath: string) {
     } catch (error) {
         console.error('Failed to execute psql command.');
     }
-    const command = `pg_restore -h ${host} -U ${user} -d ${db} --no-owner -v ${filePath}`;
+    const command = `pg_restore -h ${host} -p ${port || 5432} -U ${user} -d ${db} --no-owner --no-acl -L ${restoreList(filePath)} -v ${filePath}`;
     console.log(`SQL restore command: `, command);
     try {
         await executeCommand(command, { PGPASSWORD: password });
@@ -214,6 +237,8 @@ async function restoreFromSQLDumpPg(databaseUrl: string, filePath: string) {
     } catch (error) {
         console.error('Failed to execute pg_restore command.');
         console.error(error);
+        // A failed restore leaves the next iteration on the previous iteration's data.
+        throw error;
     }
 }
 

@@ -1,5 +1,5 @@
 // src/entity/Order.ts
-import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, ManyToMany, JoinTable } from "typeorm";
+import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, ManyToMany, JoinTable, type Relation } from "typeorm";
 import { Customer } from "./Customer";
 import { Product } from "./Product";
 
@@ -18,7 +18,8 @@ export class Order {
   totalAmount: number;
 
   @ManyToOne(() => Customer, (customer) => customer.orders, { onDelete: "CASCADE", onUpdate: "CASCADE" })
-  customer: Customer;
+  // Relation<> keeps the decorator metadata from reading Customer before it exists (circular import).
+  customer: Relation<Customer>;
 
   @ManyToMany(() => Product)
   @JoinTable({

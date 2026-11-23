@@ -1,27 +1,75 @@
 import { ClientContract, ZenStackClient } from '@zenstackhq/orm';
 import { PostgresDialect } from '@zenstackhq/orm/dialects/postgres';
+import { PolicyPlugin } from '@zenstackhq/plugin-policy';
+import type { Dialect } from 'kysely';
+import { PostgresJSDialect } from 'kysely-postgres-js';
 import { Pool } from 'pg';
+import postgres from 'postgres';
+import { bunSql, Driver, sslFor } from '../lib/drivers';
 import measure from '../lib/measure';
+import { assertIsolation, OTHER_TENANT, TENANT } from '../lib/policies';
 import { QueryResult } from '../lib/types';
 import { schema } from './schema/schema';
 
-let db: ClientContract<typeof schema>;
+type Db = ClientContract<typeof schema>;
+const clients = new Map<string, Db>();
 
-export async function zenstackPg(databaseUrl: string): Promise<QueryResult[]> {
-    console.log(`Run zenstack benchmarks: `, databaseUrl);
+function dialectFor(databaseUrl: string, driver: Driver): Dialect {
+    const ssl = sslFor(databaseUrl) || undefined;
+    switch (driver) {
+        case 'pg':
+            return new PostgresDialect({
+                pool: new Pool({ connectionString: databaseUrl, ssl }),
+            });
+        case 'postgres-js':
+            return new PostgresJSDialect({
+                postgres: postgres(databaseUrl, { ssl }),
+            });
+        case 'bun-sql':
+            // kysely-postgres-js accepts a Bun SQL instance in place of a postgres.js one.
+            return new PostgresJSDialect({ postgres: bunSql(databaseUrl) });
+    }
+}
 
+/**
+ * The policy target uses ZenStack's own access control: the rules in schema.zmodel, applied by
+ * PolicyPlugin to every query for the caller set with $setAuth. It needs no transaction and no
+ * database role of its own.
+ */
+export async function zenstackPg(
+    databaseUrl: string,
+    driver: Driver = 'pg',
+    policy = false,
+): Promise<QueryResult[]> {
+    console.log(
+        `Run zenstack benchmarks (${driver}${policy ? ', policy' : ''}): `,
+        databaseUrl,
+    );
+
+    const key = `${driver}:${policy}`;
+    let db = clients.get(key);
     if (!db) {
-        db = new ZenStackClient(schema, {
-            dialect: new PostgresDialect({
-                pool: new Pool({
-                    connectionString: databaseUrl,
-                }),
-            }),
+        const client = new ZenStackClient(schema, {
+            dialect: dialectFor(databaseUrl, driver),
+            plugins: policy ? [new PolicyPlugin()] : [],
             // log: ['query'],
-        });
+        }) as unknown as Db;
+        const asTenant = (tenant: number) =>
+            client.$setAuth({ id: tenant, tenantId: tenant }) as unknown as Db;
+        db = policy ? asTenant(TENANT) : client;
+        clients.set(key, db);
+        if (policy) {
+            assertIsolation(
+                'zenstack-policy',
+                await db.customer.count(),
+                await asTenant(OTHER_TENANT).customer.count(),
+            );
+        }
     }
 
-    await db.$connect();
+    // PolicyPlugin rejects $connect as a non-CRUD query. The policy client is already connected by
+    // the isolation check above.
+    if (!policy) await db.$connect();
 
     const results: QueryResult[] = [];
 
@@ -29,11 +77,12 @@ export async function zenstackPg(databaseUrl: string): Promise<QueryResult[]> {
      * findMany
      */
 
-    results.push(await measure('zenstack-findMany', db.customer.findMany()));
+    results.push(
+        await measure('zenstack-findMany', () => db.customer.findMany()),
+    );
 
     results.push(
-        await measure(
-            'zenstack-findMany-filter-paginate-order',
+        await measure('zenstack-findMany-filter-paginate-order', () =>
             db.customer.findMany({
                 where: { isActive: true },
                 orderBy: { createdAt: 'desc' },
@@ -44,8 +93,7 @@ export async function zenstackPg(databaseUrl: string): Promise<QueryResult[]> {
     );
 
     results.push(
-        await measure(
-            'zenstack-findMany-1-level-nesting',
+        await measure('zenstack-findMany-1-level-nesting', () =>
             db.customer.findMany({
                 include: {
                     orders: true,
@@ -58,11 +106,12 @@ export async function zenstackPg(databaseUrl: string): Promise<QueryResult[]> {
      * findFirst
      */
 
-    results.push(await measure('zenstack-findFirst', db.customer.findFirst()));
+    results.push(
+        await measure('zenstack-findFirst', () => db.customer.findFirst()),
+    );
 
     results.push(
-        await measure(
-            'zenstack-findFirst-1-level-nesting',
+        await measure('zenstack-findFirst-1-level-nesting', () =>
             db.customer.findFirst({
                 include: {
                     orders: true,
@@ -76,8 +125,7 @@ export async function zenstackPg(databaseUrl: string): Promise<QueryResult[]> {
      */
 
     results.push(
-        await measure(
-            'zenstack-findUnique',
+        await measure('zenstack-findUnique', () =>
             db.customer.findUnique({
                 where: { id: 1 },
             }),
@@ -85,8 +133,7 @@ export async function zenstackPg(databaseUrl: string): Promise<QueryResult[]> {
     );
 
     results.push(
-        await measure(
-            'zenstack-findUnique-1-level-nesting',
+        await measure('zenstack-findUnique-1-level-nesting', () =>
             db.customer.findUnique({
                 where: { id: 1 },
                 include: {
@@ -101,8 +148,7 @@ export async function zenstackPg(databaseUrl: string): Promise<QueryResult[]> {
      */
 
     results.push(
-        await measure(
-            'zenstack-create',
+        await measure('zenstack-create', () =>
             db.customer.create({
                 data: {
                     name: 'John Doe',
@@ -113,8 +159,7 @@ export async function zenstackPg(databaseUrl: string): Promise<QueryResult[]> {
     );
 
     results.push(
-        await measure(
-            'zenstack-nested-create',
+        await measure('zenstack-nested-create', () =>
             db.customer.create({
                 data: {
                     name: 'John Doe',
@@ -139,8 +184,7 @@ export async function zenstackPg(databaseUrl: string): Promise<QueryResult[]> {
      */
 
     results.push(
-        await measure(
-            'zenstack-update',
+        await measure('zenstack-update', () =>
             db.customer.update({
                 where: { id: 1 },
                 data: {
@@ -151,8 +195,7 @@ export async function zenstackPg(databaseUrl: string): Promise<QueryResult[]> {
     );
 
     results.push(
-        await measure(
-            'zenstack-nested-update',
+        await measure('zenstack-nested-update', () =>
             db.customer.update({
                 where: { id: 1 },
                 data: {
@@ -172,12 +215,12 @@ export async function zenstackPg(databaseUrl: string): Promise<QueryResult[]> {
      */
 
     results.push(
-        await measure(
-            'zenstack-upsert',
+        // Each attempt writes a new value, so no ORM can skip the update as unchanged.
+        await measure('zenstack-upsert', (attempt) =>
             db.customer.upsert({
                 where: { id: 1 },
                 update: {
-                    name: 'John Doe Upserted',
+                    name: `John Doe Upserted ${attempt}`,
                 },
                 create: {
                     name: 'John Doe',
@@ -188,15 +231,14 @@ export async function zenstackPg(databaseUrl: string): Promise<QueryResult[]> {
     );
 
     results.push(
-        await measure(
-            'zenstack-nested-upsert',
+        await measure('zenstack-nested-upsert', (attempt) =>
             db.customer.upsert({
                 where: { id: 1 },
                 update: {
-                    name: 'John Doe Upserted',
+                    name: `John Doe Upserted ${attempt}`,
                     address: {
                         update: {
-                            street: '456 New St',
+                            street: `456 New St ${attempt}`,
                         },
                     },
                 },
@@ -221,10 +263,9 @@ export async function zenstackPg(databaseUrl: string): Promise<QueryResult[]> {
      */
 
     results.push(
-        await measure(
-            'zenstack-delete',
+        await measure('zenstack-delete', (attempt) =>
             db.customer.delete({
-                where: { id: 1 },
+                where: { id: 1 + attempt },
             }),
         ),
     );

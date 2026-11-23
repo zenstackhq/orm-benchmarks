@@ -6,9 +6,9 @@ generator client {
   previewFeatures     = ["relationJoins"]
 }
 
+// Prisma 7: the connection URL lives in prisma.config.ts, and the client connects through a driver adapter.
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
 }
 
 model Customer {
@@ -18,6 +18,8 @@ model Customer {
   email     String // @unique
   address   Address?
   isActive  Boolean  @default(false)
+  // The owner the policy targets check. Every seeded row belongs to tenant 1.
+  tenantId  Int      @default(1)
   // extraInfo   Json?
   orders    Order[]
 }

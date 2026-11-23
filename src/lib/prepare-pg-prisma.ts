@@ -2,7 +2,8 @@
  * This file seeds the DB using `createMany` queries from Prisma ORM.
  */
 
-import { PrismaClient } from "../prisma/client-pg";
+import { PrismaPg } from "@prisma/adapter-pg";
+import { PrismaClient } from "../prisma/client-pg/client";
 import { faker } from "@faker-js/faker";
 
 export async function preparePg(
@@ -14,7 +15,7 @@ export async function preparePg(
   const FAKER_SEED = options.fakerSeed || 42;
 
   const prisma = new PrismaClient({
-    datasourceUrl: options.databaseUrl,
+    adapter: new PrismaPg({ connectionString: options.databaseUrl }),
   });
 
 

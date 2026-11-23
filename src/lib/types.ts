@@ -2,7 +2,10 @@ export type ORM = 'prisma' | 'drizzle' | 'typeorm' | 'zenstack';
 export type Database = 'postgresql' | 'mysql';
 export type QueryResult = {
     query: string;
+    /** Median of the timed samples in this iteration. */
     time: number;
+    /** The operation's first attempt in this iteration, warm-up included. */
+    first: number;
     data: any;
 };
 export type SingleBenchmarkRunResult = QueryResult[];

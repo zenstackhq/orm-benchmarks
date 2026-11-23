@@ -48,6 +48,12 @@ export class SchemaType implements SchemaDef {
                     attributes: [{ name: "@default", args: [{ name: "value", value: ExpressionUtils.literal(false) }] }] as readonly AttributeApplication[],
                     default: false as FieldDefault
                 },
+                tenantId: {
+                    name: "tenantId",
+                    type: "Int",
+                    attributes: [{ name: "@default", args: [{ name: "value", value: ExpressionUtils.literal(1) }] }] as readonly AttributeApplication[],
+                    default: 1 as FieldDefault
+                },
                 orders: {
                     name: "orders",
                     type: "Order",
@@ -55,6 +61,9 @@ export class SchemaType implements SchemaDef {
                     relation: { opposite: "customer" }
                 }
             },
+            attributes: [
+                { name: "@@allow", args: [{ name: "operation", value: ExpressionUtils.literal("all") }, { name: "condition", value: ExpressionUtils.binary(ExpressionUtils.field("tenantId"), "==", ExpressionUtils.member(ExpressionUtils.call("auth"), ["tenantId"])) }] }
+            ] as readonly AttributeApplication[],
             idFields: ["id"],
             uniqueFields: {
                 id: { type: "Int" }
@@ -106,6 +115,9 @@ export class SchemaType implements SchemaDef {
                     relation: { opposite: "address", fields: ["customerId"], references: ["id"], onDelete: "Cascade" }
                 }
             },
+            attributes: [
+                { name: "@@allow", args: [{ name: "operation", value: ExpressionUtils.literal("all") }, { name: "condition", value: ExpressionUtils.binary(ExpressionUtils.member(ExpressionUtils.field("customer"), ["tenantId"]), "==", ExpressionUtils.member(ExpressionUtils.call("auth"), ["tenantId"])) }] }
+            ] as readonly AttributeApplication[],
             idFields: ["id"],
             uniqueFields: {
                 id: { type: "Int" },
@@ -151,6 +163,9 @@ export class SchemaType implements SchemaDef {
                     relation: { opposite: "orders", name: "OrderProducts" }
                 }
             },
+            attributes: [
+                { name: "@@allow", args: [{ name: "operation", value: ExpressionUtils.literal("all") }, { name: "condition", value: ExpressionUtils.binary(ExpressionUtils.member(ExpressionUtils.field("customer"), ["tenantId"]), "==", ExpressionUtils.member(ExpressionUtils.call("auth"), ["tenantId"])) }] }
+            ] as readonly AttributeApplication[],
             idFields: ["id"],
             uniqueFields: {
                 id: { type: "Int" }
@@ -191,12 +206,35 @@ export class SchemaType implements SchemaDef {
                     relation: { opposite: "products", name: "OrderProducts" }
                 }
             },
+            attributes: [
+                { name: "@@allow", args: [{ name: "operation", value: ExpressionUtils.literal("all") }, { name: "condition", value: ExpressionUtils.literal(true) }] }
+            ] as readonly AttributeApplication[],
             idFields: ["id"],
             uniqueFields: {
                 id: { type: "Int" }
             }
         }
     } as const;
+    typeDefs = {
+        Auth: {
+            name: "Auth",
+            fields: {
+                id: {
+                    name: "id",
+                    type: "Int",
+                    attributes: [{ name: "@id" }] as readonly AttributeApplication[]
+                },
+                tenantId: {
+                    name: "tenantId",
+                    type: "Int"
+                }
+            },
+            attributes: [
+                { name: "@@auth" }
+            ] as readonly AttributeApplication[]
+        }
+    } as const;
+    authType = "Auth" as const;
     plugins = {};
 }
 export const schema = new SchemaType();

@@ -5,9 +5,10 @@
 
 /* eslint-disable */
 
-import { type SchemaType as $Schema } from "./schema";
-import type { ModelResult as $ModelResult } from "@zenstackhq/orm";
+import { type SchemaType as $Schema } from "./schema.js";
+import type { ModelResult as $ModelResult, TypeDefResult as $TypeDefResult } from "@zenstackhq/orm";
 export type Customer = $ModelResult<$Schema, "Customer">;
 export type Address = $ModelResult<$Schema, "Address">;
 export type Order = $ModelResult<$Schema, "Order">;
 export type Product = $ModelResult<$Schema, "Product">;
+export type Auth = $TypeDefResult<$Schema, "Auth">;

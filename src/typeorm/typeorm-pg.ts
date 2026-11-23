@@ -1,28 +1,92 @@
-import { DataSource } from 'typeorm';
+import { DataSource, EntityManager } from 'typeorm';
+import { Driver, sslFor } from '../lib/drivers';
 import measure from '../lib/measure';
+import {
+    assertIsolation,
+    OTHER_TENANT,
+    policyUrl,
+    TENANT,
+    TENANT_SETTING,
+} from '../lib/policies';
 import { QueryResult } from '../lib/types';
 import { Address } from './entities/Address';
 import { Customer } from './entities/Customer';
 import { Order } from './entities/Order';
 import { Product } from './entities/Product';
 
-let AppDataSource: DataSource;
+const dataSources = new Map<boolean, DataSource>();
 
-export async function typeormPg(databaseUrl: string): Promise<QueryResult[]> {
+/** Runs `work` in a transaction whose first statement sets the tenant row-level security reads. */
+function asTenant<T>(
+    dataSource: DataSource,
+    tenant: number,
+    work: (manager: EntityManager) => Promise<T>,
+): Promise<T> {
+    return dataSource.transaction(async (manager) => {
+        await manager.query('select set_config($1, $2, true)', [
+            TENANT_SETTING,
+            String(tenant),
+        ]);
+        return work(manager);
+    });
+}
+
+/**
+ * TypeORM's PostgreSQL driver is node-postgres (`pg`). TypeORM has no access-policy feature, so the
+ * policy target uses PostgreSQL row-level security: a role that cannot bypass it, and the tenant
+ * set inside a transaction around every operation.
+ */
+export async function typeormPg(
+    databaseUrl: string,
+    driver: Driver = 'pg',
+    policy = false,
+): Promise<QueryResult[]> {
+    let AppDataSource = dataSources.get(policy);
     if (!AppDataSource) {
+        const url = policy ? policyUrl(databaseUrl) : databaseUrl;
         AppDataSource = new DataSource({
             type: 'postgres',
-            url: databaseUrl,
+            url,
             logging: false,
             entities: [Customer, Order, Address, Product],
-            ssl: databaseUrl.includes('localhost')
-                ? undefined
-                : { rejectUnauthorized: false },
+            ssl: sslFor(url) || undefined,
         });
         await AppDataSource.initialize();
+        dataSources.set(policy, AppDataSource);
+        if (policy) {
+            const count = (tenant: number) =>
+                asTenant(AppDataSource!, tenant, (manager) =>
+                    manager.count(Customer),
+                );
+            assertIsolation(
+                'typeorm-policy',
+                await count(TENANT),
+                await count(OTHER_TENANT),
+            );
+        }
     }
 
-    console.log(`Run typeorm benchmarks: `, databaseUrl);
+    // Every operation below uses `ds`. For the policy target it is the transaction's entity manager.
+    const base = AppDataSource.manager;
+    let ds: EntityManager = base;
+    const scoped =
+        <T>(op: (attempt: number) => Promise<T>) =>
+        (attempt: number): Promise<T> =>
+            policy
+                ? asTenant(AppDataSource!, TENANT, async (manager) => {
+                      ds = manager;
+                      try {
+                          return await op(attempt);
+                      } finally {
+                          ds = base;
+                      }
+                  })
+                : op(attempt);
+
+    console.log(
+        `Run typeorm benchmarks (${driver}${policy ? ', policy' : ''}): `,
+        databaseUrl,
+    );
 
     const results: QueryResult[] = [];
 
@@ -32,28 +96,32 @@ export async function typeormPg(databaseUrl: string): Promise<QueryResult[]> {
     results.push(
         await measure(
             'typeorm-findMany',
-            AppDataSource.getRepository(Customer).find(),
+            scoped(() => ds.getRepository(Customer).find()),
         ),
     );
 
     results.push(
         await measure(
             'typeorm-findMany-filter-paginate-order',
-            AppDataSource.getRepository(Customer).find({
-                where: { isActive: true },
-                order: { createdAt: 'DESC' },
-                skip: 0,
-                take: 10,
-            }),
+            scoped(() =>
+                ds.getRepository(Customer).find({
+                    where: { isActive: true },
+                    order: { createdAt: 'DESC' },
+                    skip: 0,
+                    take: 10,
+                }),
+            ),
         ),
     );
 
     results.push(
         await measure(
             'typeorm-findMany-1-level-nesting',
-            AppDataSource.getRepository(Customer).find({
-                relations: ['orders'],
-            }),
+            scoped(() =>
+                ds.getRepository(Customer).find({
+                    relations: { orders: true },
+                }),
+            ),
         ),
     );
 
@@ -63,24 +131,24 @@ export async function typeormPg(databaseUrl: string): Promise<QueryResult[]> {
 
     results.push(
         await measure(
-            // not using `findOne()` because of:
-            // Error: You must provide selection conditions in order to find a single row.
             'typeorm-findFirst',
-            AppDataSource.getRepository(Customer).find({
-                take: 1,
-            }),
+            scoped(() =>
+                ds.getRepository(Customer).find({
+                    take: 1,
+                }),
+            ),
         ),
     );
 
     results.push(
         await measure(
-            // not using `findOne({ relations: ["orders"] })` because of:
-            // Error: You must provide selection conditions in order to find a single row.
             'typeorm-findFirst-1-level-nesting',
-            AppDataSource.getRepository(Customer).find({
-                take: 1,
-                relations: ['orders'],
-            }),
+            scoped(() =>
+                ds.getRepository(Customer).find({
+                    take: 1,
+                    relations: { orders: true },
+                }),
+            ),
         ),
     );
 
@@ -90,17 +158,21 @@ export async function typeormPg(databaseUrl: string): Promise<QueryResult[]> {
     results.push(
         await measure(
             'typeorm-findUnique',
-            AppDataSource.getRepository(Customer).findOne({ where: { id: 1 } }),
+            scoped(() =>
+                ds.getRepository(Customer).findOne({ where: { id: 1 } }),
+            ),
         ),
     );
 
     results.push(
         await measure(
             'typeorm-findUnique-1-level-nesting',
-            AppDataSource.getRepository(Customer).findOne({
-                where: { id: 1 },
-                relations: ['orders'],
-            }),
+            scoped(() =>
+                ds.getRepository(Customer).findOne({
+                    where: { id: 1 },
+                    relations: { orders: true },
+                }),
+            ),
         ),
     );
 
@@ -110,16 +182,18 @@ export async function typeormPg(databaseUrl: string): Promise<QueryResult[]> {
     results.push(
         await measure(
             'typeorm-create',
-            AppDataSource.getRepository(Customer).save({
-                name: 'John Doe',
-                email: 'john.doe@example.com',
-                isActive: false,
-            }),
+            scoped(() =>
+                ds.getRepository(Customer).save({
+                    name: 'John Doe',
+                    email: 'john.doe@example.com',
+                    isActive: false,
+                }),
+            ),
         ),
     );
 
-    const nestedCreate = AppDataSource.transaction(
-        async (transactionalEntityManager) => {
+    const nestedCreate = () =>
+        ds.transaction(async (transactionalEntityManager) => {
             // Insert customer
             const customer = await transactionalEntityManager.save(Customer, {
                 name: 'John Doe',
@@ -144,9 +218,8 @@ export async function typeormPg(databaseUrl: string): Promise<QueryResult[]> {
                     { A: order.id, B: 2 },
                 ])
                 .execute();
-        },
-    );
-    results.push(await measure('typeorm-nested-create', nestedCreate));
+        });
+    results.push(await measure('typeorm-nested-create', scoped(nestedCreate)));
 
     /**
      * update
@@ -154,9 +227,10 @@ export async function typeormPg(databaseUrl: string): Promise<QueryResult[]> {
     results.push(
         await measure(
             'typeorm-update',
-            AppDataSource.getRepository(Customer).update(
-                { id: 1 },
-                { name: 'John Doe Updated' },
+            scoped(() =>
+                ds
+                    .getRepository(Customer)
+                    .update({ id: 1 }, { name: 'John Doe Updated' }),
             ),
         ),
     );
@@ -164,21 +238,23 @@ export async function typeormPg(databaseUrl: string): Promise<QueryResult[]> {
     results.push(
         await measure(
             'typeorm-nested-update',
-            AppDataSource.transaction(async (transactionalEntityManager) => {
-                // Update customer name
-                await transactionalEntityManager.update(
-                    Customer,
-                    { id: 1 },
-                    { name: 'John Doe Updated' },
-                );
+            scoped(() =>
+                ds.transaction(async (transactionalEntityManager) => {
+                    // Update customer name
+                    await transactionalEntityManager.update(
+                        Customer,
+                        { id: 1 },
+                        { name: 'John Doe Updated' },
+                    );
 
-                // Update address
-                await transactionalEntityManager.update(
-                    Address,
-                    { customer: { id: 1 } },
-                    { street: '456 New St' },
-                );
-            }),
+                    // Update address
+                    await transactionalEntityManager.update(
+                        Address,
+                        { customer: { id: 1 } },
+                        { street: '456 New St' },
+                    );
+                }),
+            ),
         ),
     );
 
@@ -187,23 +263,26 @@ export async function typeormPg(databaseUrl: string): Promise<QueryResult[]> {
      */
     results.push(
         await measure(
+            // Each attempt writes a new value: save() skips the UPDATE when nothing changed.
             'typeorm-upsert',
-            AppDataSource.getRepository(Customer).save({
-                id: 1,
-                name: 'John Doe Upserted',
-                email: 'john.doe@example.com',
-                isActive: false,
-            }),
+            scoped((attempt) =>
+                ds.getRepository(Customer).save({
+                    id: 1,
+                    name: `John Doe Upserted ${attempt}`,
+                    email: 'john.doe@example.com',
+                    isActive: false,
+                }),
+            ),
         ),
     );
 
     // Nested upsert operation using transaction
-    const nestedUpsert = AppDataSource.transaction(
-        async (transactionalEntityManager) => {
+    const nestedUpsert = (attempt: number) =>
+        ds.transaction(async (transactionalEntityManager) => {
             // Upsert Customer
             const customer = await transactionalEntityManager.save(Customer, {
                 id: 1, // Set the ID if you want to update an existing record
-                name: 'John Doe Upserted',
+                name: `John Doe Upserted ${attempt}`,
                 email: 'john.doe@example.com',
                 isActive: false,
             });
@@ -212,14 +291,13 @@ export async function typeormPg(databaseUrl: string): Promise<QueryResult[]> {
             await transactionalEntityManager.save(Address, {
                 id: 1, // Set the ID if you want to update an existing record
                 customer: customer,
-                street: '456 New St',
+                street: `456 New St ${attempt}`,
                 city: 'Anytown',
                 postalCode: '12345',
                 country: 'Country',
             });
-        },
-    );
-    results.push(await measure('typeorm-nested-upsert', nestedUpsert));
+        });
+    results.push(await measure('typeorm-nested-upsert', scoped(nestedUpsert)));
 
     /**
      * delete
@@ -227,7 +305,9 @@ export async function typeormPg(databaseUrl: string): Promise<QueryResult[]> {
     results.push(
         await measure(
             'typeorm-delete',
-            AppDataSource.getRepository(Customer).delete({ id: 1 }),
+            scoped((attempt) =>
+                ds.getRepository(Customer).delete({ id: 1 + attempt }),
+            ),
         ),
     );
 
